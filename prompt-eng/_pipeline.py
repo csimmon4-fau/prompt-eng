@@ -221,6 +221,9 @@ def generate_self_reflective_prompt(initial_prompt, model, max_iterations, tempe
     """
 
     prompt = initial_prompt 
+    best_prompt = initial_prompt  # Initialize the best prompt
+    best_similarity = 0  # Initialize the best similarity score
+
     for i in range(max_iterations):
         # Process the request and log the response
         print(f"Iteration {i+1}: Refining prompt...")
@@ -249,12 +252,18 @@ def generate_self_reflective_prompt(initial_prompt, model, max_iterations, tempe
         # Check for convergence: If the similarity is above the threshold, stop
         if similarity >= similarity_threshold:
             print(f"Convergence reached at iteration {i+1} with similarity {similarity}. Stopping refinement.")
+            best_prompt = refined_prompt  # Update the best prompt
             break
+
+        # Update the best prompt if the current similarity is higher
+        if similarity > best_similarity:
+            best_similarity = similarity
+            best_prompt = refined_prompt
 
         # Update prompt for next iteration
         prompt = self_reflective_prompt(refined_prompt) 
 
-    return prompt
+    return best_prompt
 
 
 def refine_prompt(prompt, response):
@@ -271,19 +280,13 @@ def refine_prompt(prompt, response):
     return refined_prompt
 
 
-def process_and_log_request(prompt, model, prompt_type,temperature,num_ctx_tokens,num_output_tokens):
+def process_request(prompt, model, temperature, num_ctx_tokens, num_output_tokens, target="ollama"):
     """
-    Process the request by creating the payload, making the model request, and logging the response to a CSV file.
+    Process the request by creating the payload and making the model request.
     """
-    
-    # print(f"\n Prompt: {prompt}") 
-    # print(f"\n Model: {model}") 
-    # print(f"\n Temperature: {temperature}") 
-    # print(f"\n num_ctx_tokens: {num_ctx_tokens}") 
-    # print(f"\n num_output_tokens: {num_output_tokens}") 
     # Create payload
     payload = create_payload(
-        target="ollama",   
+        target=target,   
         model=model, 
         prompt=prompt, 
         temperature=temperature, 
@@ -296,8 +299,67 @@ def process_and_log_request(prompt, model, prompt_type,temperature,num_ctx_token
     print(f"\nModel Response: {response}")    
     print(f"\nTime taken: {time}s")
     
-    # Write the payload, response, and time taken to a CSV file
-    write_to_csv(payload, response, time, prompt_type)
+    return payload, response, time
+
+def log_results(payload, response, time_taken, prompt_type):
+    """
+    Log the payload, response, time taken, and prompt type to a CSV file.
+    """
+    global filename, delete_file
+    fieldnames = ['timestamp', 'model', 'prompt', 'prompt_type', 'temperature', 'num_ctx_tokens', 'num_output_tokens', 'time_taken', 'response']
+    
+    # Delete the file if delete_file is True
+    if delete_file and os.path.isfile(filename):
+        os.remove(filename)
+    
+    # Check if the file exists to write headers
+    file_exists = os.path.isfile(filename)
+    
+    with open(filename, mode='a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        
+        # Write the header only if the file does not exist
+        if not file_exists:
+            writer.writeheader()
+        
+        # Extract payload details
+        model = payload.get('model', '')
+        prompt = payload.get('prompt', '')
+        temperature = payload.get('options', {}).get('temperature', '')
+        num_ctx_tokens = payload.get('options', {}).get('num_ctx', '')
+        num_output_tokens = payload.get('options', {}).get('num_predict', '')
+        
+        # Get the current timestamp
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Write the row
+        writer.writerow({
+            'timestamp': timestamp,
+            'model': model,
+            'prompt': prompt,
+            'prompt_type': prompt_type,
+            'temperature': temperature,
+            'num_ctx_tokens': num_ctx_tokens,
+            'num_output_tokens': num_output_tokens,
+            'time_taken': time_taken,
+            'response': response            
+        })
+
+def process_and_log_request(prompt, model, prompt_type, temperature, num_ctx_tokens, num_output_tokens):
+    """
+    Process the request and log the response to a CSV file.
+    """
+    # Process the request
+    payload, response, time = process_request(
+        prompt=prompt,
+        model=model,
+        temperature=temperature,
+        num_ctx_tokens=num_ctx_tokens,
+        num_output_tokens=num_output_tokens
+    )
+    
+    # Log the results
+    log_results(payload, response, time, prompt_type)
     
     return response, time
 
