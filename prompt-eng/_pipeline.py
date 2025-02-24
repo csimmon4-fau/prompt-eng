@@ -13,7 +13,7 @@
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
 #
-# The above copyright notice and this permission notice shall be included in all
+# The above copyright notice and this permission shall be included in all
 # copies or substantial portions of the Software.
 # 
 # Documentation and Getting Started:
@@ -24,23 +24,42 @@
 # 
 
 
-import requests
-import json
+# Standard library imports
 import os
+import json
 import time
 import argparse
 import csv
 from datetime import datetime
-from transformers import BertTokenizer, BertModel
+from typing import Dict, Any, Tuple, Optional
+
+# Third-party imports
+import requests
 import torch
+from transformers import BertTokenizer, BertModel
 from sklearn.metrics.pairwise import cosine_similarity
 
-filename="output.csv"
-delete_file=False 
+# Local imports
+from prompts import self_reflective_prompt, get_prompt
 
-# Initialize the tokenizer and model
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained('bert-base-uncased')
+# Constants
+FILENAME = "output.csv"  # Output file for logging responses
+DELETE_FILE = False      # If True, deletes existing file before writing
+FIELDNAMES = [          # CSV column headers
+    'timestamp',        # Time of request
+    'model',           # Model name used
+    'prompt',          # Input prompt
+    'prompt_type',     # Type of prompt (default, zero-shot, etc.)
+    'temperature',     # Model temperature setting
+    'num_ctx_tokens',  # Context window size
+    'num_output_tokens', # Maximum tokens to generate
+    'time_taken',      # Request processing time
+    'response'         # Model response
+]
+
+# Model initialization
+bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+bert_model = BertModel.from_pretrained('bert-base-uncased')
 
 def load_config():
     """
@@ -168,49 +187,47 @@ def model_req(payload=None):
     return
 
 
-def write_to_csv(payload, response, time_taken, prompt_type):
-    """
-    Write the payload, response, time taken, and prompt type to a CSV file.
-    """
-    global filename, delete_file
-    fieldnames = ['timestamp', 'model', 'prompt', 'prompt_type', 'temperature', 'num_ctx_tokens', 'num_output_tokens', 'time_taken', 'response']
+# def write_to_csv(payload, response, time_taken, prompt_type):
+#     """
+#     Write the payload, response, time taken, and prompt type to a CSV file.
+#     """
+#     global FILENAME, DELETE_FILE  # Update global reference if needed
     
-    # Delete the file if delete_file is True
-    if delete_file and os.path.isfile(filename):
-        os.remove(filename)
+#     # Update variable references
+#     if DELETE_FILE and os.path.isfile(FILENAME):
+#         os.remove(FILENAME)
     
-    # Check if the file exists to write headers
-    file_exists = os.path.isfile(filename)
+#     file_exists = os.path.isfile(FILENAME)
     
-    with open(filename, mode='a', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+#     with open(FILENAME, mode='a', newline='') as file:
+#         writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
         
-        # Write the header only if the file does not exist
-        if not file_exists:
-            writer.writeheader()
+#         # Write the header only if the file does not exist
+#         if not file_exists:
+#             writer.writeheader()
         
-        # Extract payload details
-        model = payload.get('model', '')
-        prompt = payload.get('prompt', '')
-        temperature = payload.get('options', {}).get('temperature', '')
-        num_ctx_tokens = payload.get('options', {}).get('num_ctx', '')
-        num_output_tokens = payload.get('options', {}).get('num_predict', '')
+#         # Extract payload details
+#         model = payload.get('model', '')
+#         prompt = payload.get('prompt', '')
+#         temperature = payload.get('options', {}).get('temperature', '')
+#         num_ctx_tokens = payload.get('options', {}).get('num_ctx', '')
+#         num_output_tokens = payload.get('options', {}).get('num_predict', '')
         
-        # Get the current timestamp
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+#         # Get the current timestamp
+#         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # Write the row
-        writer.writerow({
-            'timestamp': timestamp,
-            'model': model,
-            'prompt': prompt,
-            'prompt_type': prompt_type,
-            'temperature': temperature,
-            'num_ctx_tokens': num_ctx_tokens,
-            'num_output_tokens': num_output_tokens,
-            'time_taken': time_taken,
-            'response': response            
-        })
+#         # Write the row
+#         writer.writerow({
+#             'timestamp': timestamp,
+#             'model': model,
+#             'prompt': prompt,
+#             'prompt_type': prompt_type,
+#             'temperature': temperature,
+#             'num_ctx_tokens': num_ctx_tokens,
+#             'num_output_tokens': num_output_tokens,
+#             'time_taken': time_taken,
+#             'response': response            
+#         })
 
 
 from prompts import self_reflective_prompt
@@ -301,24 +318,20 @@ def process_request(prompt, model, temperature, num_ctx_tokens, num_output_token
     
     return payload, response, time
 
-def log_results(payload, response, time_taken, prompt_type):
+def log_results(payload: Dict[str, Any], response: str, time_taken: float, prompt_type: str) -> None:
     """
     Log the payload, response, time taken, and prompt type to a CSV file.
     """
-    global filename, delete_file
-    fieldnames = ['timestamp', 'model', 'prompt', 'prompt_type', 'temperature', 'num_ctx_tokens', 'num_output_tokens', 'time_taken', 'response']
+    global FILENAME, DELETE_FILE
     
-    # Delete the file if delete_file is True
-    if delete_file and os.path.isfile(filename):
-        os.remove(filename)
+    if DELETE_FILE and os.path.isfile(FILENAME):
+        os.remove(FILENAME)
     
-    # Check if the file exists to write headers
-    file_exists = os.path.isfile(filename)
+    file_exists = os.path.isfile(FILENAME)
     
-    with open(filename, mode='a', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+    with open(FILENAME, mode='a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)  # Use constant
         
-        # Write the header only if the file does not exist
         if not file_exists:
             writer.writeheader()
         
@@ -329,10 +342,8 @@ def log_results(payload, response, time_taken, prompt_type):
         num_ctx_tokens = payload.get('options', {}).get('num_ctx', '')
         num_output_tokens = payload.get('options', {}).get('num_predict', '')
         
-        # Get the current timestamp
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # Write the row
         writer.writerow({
             'timestamp': timestamp,
             'model': model,
@@ -364,8 +375,8 @@ def process_and_log_request(prompt, model, prompt_type, temperature, num_ctx_tok
     return response, time
 
 def get_embedding(text):
-    inputs = tokenizer(text, return_tensors='pt')
-    outputs = model(**inputs)
+    inputs = bert_tokenizer(text, return_tensors='pt')
+    outputs = bert_model(**inputs)
     return outputs.last_hidden_state.mean(dim=1).detach().numpy()
 
 def compute_similarity(prompt1, prompt2):
@@ -381,13 +392,13 @@ def evaluate_prompt(prompt):
     
     return clarity_score, specificity_score, effectiveness_score
 
-###
-### DEBUG
-###
+#------------------------------------------------------------------------------
+# DEBUG SECTION
+# This section runs when the script is executed directly
+#------------------------------------------------------------------------------
 if __name__ == "__main__":
-    from _pipeline import create_payload, model_req, write_to_csv, generate_self_reflective_prompt, process_and_log_request
-    from prompts import get_prompt     
-
+    from prompts import get_prompt  
+    
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Select prompt type")
     parser.add_argument(
