@@ -31,7 +31,16 @@ import time
 import argparse
 import csv
 from datetime import datetime
+from transformers import BertTokenizer, BertModel
+import torch
+from sklearn.metrics.pairwise import cosine_similarity
 
+filename="output.csv"
+delete_file=False 
+
+# Initialize the tokenizer and model
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained('bert-base-uncased')
 
 def load_config():
     """
@@ -123,7 +132,8 @@ def model_req(payload=None):
     if api_key: headers["Authorization"] = f"Bearer {api_key}"
 
     #print(url, headers)
-    print(payload)
+    # print(payload)
+    print(f"\nPayload: {payload}\n")
 
     # Send out request to Model Provider
     try:
@@ -158,10 +168,11 @@ def model_req(payload=None):
     return
 
 
-def write_to_csv(payload, response, time_taken, prompt_type, filename="output.csv", delete_file=False):
+def write_to_csv(payload, response, time_taken, prompt_type):
     """
     Write the payload, response, time taken, and prompt type to a CSV file.
     """
+    global filename, delete_file
     fieldnames = ['timestamp', 'model', 'prompt', 'prompt_type', 'temperature', 'num_ctx_tokens', 'num_output_tokens', 'time_taken', 'response']
     
     # Delete the file if delete_file is True
@@ -202,11 +213,117 @@ def write_to_csv(payload, response, time_taken, prompt_type, filename="output.cs
         })
 
 
+from prompts import self_reflective_prompt
+
+def generate_self_reflective_prompt(initial_prompt, model, max_iterations, temperature, num_ctx_tokens, num_output_tokens, similarity_threshold=0.95):
+    """
+    Generate a self-reflective prompt by iteratively calling the model and refining the prompt.
+    """
+
+    prompt = initial_prompt 
+    for i in range(max_iterations):
+        # Process the request and log the response
+        print(f"Iteration {i+1}: Refining prompt...")
+
+        # Send to the model for refinement
+        response, time = process_and_log_request(
+            prompt=prompt,
+            model=model,
+            prompt_type="self_reflective",
+            temperature=temperature, 
+            num_ctx_tokens=num_ctx_tokens, 
+            num_output_tokens=num_output_tokens              
+        )
+
+        # Extract the refined prompt from the model's response
+        refined_prompt = refine_prompt(prompt, response)
+
+        # Compute semantic similarity
+        similarity = compute_similarity(prompt, refined_prompt)
+        print(f"Semantic Similarity: {similarity}")
+
+        # Evaluate the refined prompt
+        clarity, specificity, effectiveness = evaluate_prompt(refined_prompt)
+        print(f"Clarity: {clarity}, Specificity: {specificity}, Effectiveness: {effectiveness}")
+
+        # Check for convergence: If the similarity is above the threshold, stop
+        if similarity >= similarity_threshold:
+            print(f"Convergence reached at iteration {i+1} with similarity {similarity}. Stopping refinement.")
+            break
+
+        # Update prompt for next iteration
+        prompt = self_reflective_prompt(refined_prompt) 
+
+    return prompt
+
+
+def refine_prompt(prompt, response):
+    """
+    Refine the prompt based on the response.
+    This function assumes that the response contains only the refined prompt.
+    """
+    # Debug: Print the response to verify its content
+    # print(f"XXXResponse: {response}")
+
+    # Assume the entire response is the refined prompt
+    refined_prompt = response.strip()
+    
+    return refined_prompt
+
+
+def process_and_log_request(prompt, model, prompt_type,temperature,num_ctx_tokens,num_output_tokens):
+    """
+    Process the request by creating the payload, making the model request, and logging the response to a CSV file.
+    """
+    
+    # print(f"\n Prompt: {prompt}") 
+    # print(f"\n Model: {model}") 
+    # print(f"\n Temperature: {temperature}") 
+    # print(f"\n num_ctx_tokens: {num_ctx_tokens}") 
+    # print(f"\n num_output_tokens: {num_output_tokens}") 
+    # Create payload
+    payload = create_payload(
+        target="ollama",   
+        model=model, 
+        prompt=prompt, 
+        temperature=temperature, 
+        num_ctx=num_ctx_tokens, 
+        num_predict=num_output_tokens    
+    )
+
+    # Make request and get response
+    time, response = model_req(payload=payload)
+    print(f"\nModel Response: {response}")    
+    print(f"\nTime taken: {time}s")
+    
+    # Write the payload, response, and time taken to a CSV file
+    write_to_csv(payload, response, time, prompt_type)
+    
+    return response, time
+
+def get_embedding(text):
+    inputs = tokenizer(text, return_tensors='pt')
+    outputs = model(**inputs)
+    return outputs.last_hidden_state.mean(dim=1).detach().numpy()
+
+def compute_similarity(prompt1, prompt2):
+    embedding1 = get_embedding(prompt1)
+    embedding2 = get_embedding(prompt2)
+    return cosine_similarity(embedding1, embedding2)[0][0]
+
+def evaluate_prompt(prompt):
+    # Example quality metrics
+    clarity_score = len(prompt.split())  # Example: word count as a proxy for clarity
+    specificity_score = prompt.count('specific')  # Example: count of the word 'specific'
+    effectiveness_score = prompt.count('effective')  # Example: count of the word 'effective'
+    
+    return clarity_score, specificity_score, effectiveness_score
+
 ###
 ### DEBUG
 ###
 if __name__ == "__main__":
-    from _pipeline import create_payload, model_req
+    from _pipeline import create_payload, model_req, write_to_csv, generate_self_reflective_prompt, process_and_log_request
     from prompts import get_prompt     
 
     # Parse command-line arguments
@@ -222,23 +339,30 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Get the prompt based on the command-line argument (default if none provided)
-    prompt, num_ctx_tokens, num_output_tokens = get_prompt(args.prompt_type)
+    prompt,model,temperature,num_ctx_tokens, num_output_tokens = get_prompt(args.prompt_type)
 
-   # Create payload
-    payload = create_payload(
-        target="ollama",   
-        model="llama3.2:latest", 
-        prompt=prompt, 
-        temperature=1.0, 
-        num_ctx=num_ctx_tokens, 
-        num_predict=num_output_tokens
+    #generate the self reflective prompt
+    if args.prompt_type == "self_reflective":
+        # Generate self-reflective prompt
+            prompt = generate_self_reflective_prompt(
+            initial_prompt=prompt,
+            model=model,
+            max_iterations=5,  
+            temperature=temperature,
+            num_ctx_tokens=num_ctx_tokens,
+            num_output_tokens=num_output_tokens
+        )
+        
+      
+    # Send the prompt to the model
+    print(f"\nFinal Prompt Executing")
+    process_and_log_request(
+        prompt=prompt,
+        model=model,
+        prompt_type=args.prompt_type,
+        temperature=temperature,
+        num_ctx_tokens=num_ctx_tokens,
+        num_output_tokens=num_output_tokens
     )
 
-    # Make request and print response
-    time, response = model_req(payload=payload)
-    print(response)
-    if time:
-        print(f"Time taken: {time}s")
-        
-    # Write the payload, response, and time taken to a CSV file
-    write_to_csv(payload, response, time, args.prompt_type,"output.csv", True)
+

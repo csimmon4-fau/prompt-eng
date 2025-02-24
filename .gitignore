@@ -177,3 +177,8 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 output.csv
+.idea/misc.xml
+.idea/modules.xml
+.idea/prompt-eng.iml
+.idea/vcs.xml
+.idea/inspectionProfiles/profiles_settings.xml

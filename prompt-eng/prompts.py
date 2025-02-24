@@ -1,63 +1,13 @@
-# Global constant for the zero-shot prompt
+# Global prompt constants
 ZERO_SHOT_PROMPT = (
-    "Generate a list of functional and non-functional requirements for a local, "
+    "Generate requirements for a local, "
     "privacy-preserving LLM-based tool that accurately and efficiently redacts names, "
     "emails, and other sensitive information from meeting transcripts. "
-    "Ensure that functional requirements describe the core features of the tool, "
-    "while non-functional requirements address performance, security, scalability, and privacy constraints."
+    "Ensure that requirements describe the core features of the tool, "
+    "performance, security, scalability, and privacy constraints."
 )
 
-
-def get_prompt(prompt_type="default"):
-    """
-    Returns the predefined message prompt based on the given type.
-    
-    Args:
-        prompt_type (str): Type of prompt to return. Options:
-                           - "default" for basic arithmetic
-                           - "zero_shot" for zero-shot learning
-                           - "few_shot" for few-shot learning
-    
-    Returns:
-        tuple: (PROMPT, num_ctx_tokens, num_output_tokens)
-    """
-    match prompt_type:
-        case "zero_shot":
-            return zero_shot()
-        case "few_shot":
-            return few_shot()
-        case "self_reflective":
-            return self_reflective()
-        case _:
-            # Default case
-            MESSAGE = "1 + 1"
-            num_ctx_tokens = 500
-            num_output_tokens = 2400
-            return MESSAGE, num_ctx_tokens, num_output_tokens
-
-
-def zero_shot():
-    """
-    Returns a predefined zero-shot prompt with context settings.
-    
-    Returns:
-        tuple: (prompt, num_ctx_tokens, num_output_tokens)
-    """
-    prompt =ZERO_SHOT_PROMPT    
-    num_ctx_tokens = 500
-    num_output_tokens = 2400
-    return prompt, num_ctx_tokens, num_output_tokens
-
-
-def few_shot():
-    """
-    Returns a predefined few-shot prompt with context settings.
-
-    Returns:
-        tuple: (prompt, num_ctx_tokens, num_output_tokens)
-    """
-    
-    prompt = (
+FEW_SHOT_PROMPT = (
         "The following are examples of functional and non-functional requirements for different AI-powered tools "
         "that ensure privacy and security while processing sensitive information. Use these examples to structure "
         "your response for the main task.\n\n"
@@ -101,23 +51,80 @@ def few_shot():
         "5. Logs of redacted information should be stored securely with restricted access.\n\n"
 
         "**Now, complete the following task:**\n\n"
-        "**Input:**\n"
-        "Generate a list of functional and non-functional requirements for a local, privacy-preserving LLM-based tool "
-        "that accurately and efficiently redacts names, emails, and other sensitive information from meeting transcripts. "
-        "Ensure that functional requirements describe the core features of the tool, while non-functional requirements "
-        "address performance, security, scalability, and privacy constraints."
+        "**Input:**\n"      
     )
+
+def get_prompt(prompt_type="default"):
+    """
+    Returns the predefined message prompt based on the given type.
     
+    Args:
+        prompt_type (str): Type of prompt to return. Options:
+                           - "default" for basic arithmetic
+                           - "zero_shot" for zero-shot learning
+                           - "few_shot" for few-shot learning
+    
+    Returns:
+        tuple: (PROMPT, model, temperature, num_ctx_tokens, num_output_tokens)
+    """
+    match prompt_type:
+        case "zero_shot":
+            return zero_shot()
+        case "few_shot":
+            return few_shot()
+        case "self_reflective":
+            return self_reflective()
+        case _:
+            # Default case
+            MESSAGE = "1 + 1"
+            model = "llama3.2:latest"  # Ensure this is a string
+            temperature = 1.0
+            num_ctx_tokens = 500
+            num_output_tokens = 2400
+            return MESSAGE, model, temperature, num_ctx_tokens, num_output_tokens
+
+def zero_shot():
+    """
+    Returns a predefined zero-shot prompt with context settings.
+    
+    Returns:
+        tuple: (prompt, model, temperature, num_ctx_tokens, num_output_tokens)
+    """
+    prompt = ZERO_SHOT_PROMPT
+    model = "llama3.2:latest"  # Ensure this is a string
+    temperature = 1.0
+    num_ctx_tokens = 500
+    num_output_tokens = 2400
+    return prompt, model, temperature, num_ctx_tokens, num_output_tokens
+
+def few_shot():
+    """
+    Returns a predefined few-shot prompt with context settings.
+    
+    Returns:
+        tuple: (prompt, model, temperature, num_ctx_tokens, num_output_tokens)
+    """
+    prompt = FEW_SHOT_PROMPT + ZERO_SHOT_PROMPT
+    model = "llama3.2:latest"  # Ensure this is a string
+    temperature = 1.0
     num_ctx_tokens = 1500
     num_output_tokens = 5000
-    return prompt, num_ctx_tokens, num_output_tokens
+    return prompt, model, temperature, num_ctx_tokens, num_output_tokens
 
 def self_reflective():
-    num_ctx_tokens = 1500
-    num_output_tokens = 5000
+    """
+    Returns a predefined self-reflective prompt with context settings.
+    
+    Returns:
+        tuple: (refined_prompt, model, temperature, num_ctx_tokens, num_output_tokens)
+    """
+    model = "llama3.2:latest"  # Ensure this is a string
+    temperature = 1.0
+    num_ctx_tokens = 5000
+    num_output_tokens = 10000
     
     refined_prompt = self_reflective_prompt(ZERO_SHOT_PROMPT)
-    return refined_prompt,num_ctx_tokens, num_output_tokens
+    return refined_prompt, model, temperature, num_ctx_tokens, num_output_tokens
 
 def self_reflective_prompt(prompt):
     """
@@ -127,7 +134,7 @@ def self_reflective_prompt(prompt):
         prompt (str): The original prompt to be refined.
 
     Returns:
-        tuple: (refined_prompt, num_ctx_tokens, num_output_tokens)
+        str: The refined prompt.
     """
     
     SELF_REFLECTION_PROMPT = (
@@ -135,10 +142,9 @@ def self_reflective_prompt(prompt):
         "Ensure that the revised prompt provides unambiguous instructions to an LLM and enhances "
         "the likelihood of generating a high-quality response. "
         "Additionally, maintain the original intent while making it more structured and actionable.\n\n"
-        f"Original Prompt:\n{prompt}\n\n"
-        "Refined Prompt:"
+        "Original Prompt:\n"
+        f"{prompt}\n\n"
+        "Please provide only the refined prompt below. Do not include any other commentary or explanations."
     )
     
     return SELF_REFLECTION_PROMPT
-
-
