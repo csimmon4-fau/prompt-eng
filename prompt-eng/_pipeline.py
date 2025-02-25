@@ -44,7 +44,7 @@ from prompts import self_reflective_prompt, get_prompt
 
 # Constants
 FILENAME = "output.csv"  # Output file for logging responses
-DELETE_FILE = False      # If True, deletes existing file before writing
+DELETE_FILE = True      # If True, deletes existing file before writing
 FIELDNAMES = [          # CSV column headers
     'timestamp',        # Time of request
     'model',           # Model name used
@@ -54,8 +54,13 @@ FIELDNAMES = [          # CSV column headers
     'num_ctx_tokens',  # Context window size
     'num_output_tokens', # Maximum tokens to generate
     'time_taken',      # Request processing time
-    'response'         # Model response
+    'similarity',      # Semantic similarity score
+    'clarity',         # Clarity score
+    'specificity',     # Specificity score
+    'effectiveness',   # Effectiveness score
+    'response'         # Model response (moved to last)
 ]
+_FIRST_WRITE = True  # Track first write operation
 
 # Model initialization
 bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -186,100 +191,60 @@ def model_req(payload=None):
         return -1, f"!!ERROR!! HTTP Response={response.status_code}, {response.text}"
     return
 
-
-# def write_to_csv(payload, response, time_taken, prompt_type):
-#     """
-#     Write the payload, response, time taken, and prompt type to a CSV file.
-#     """
-#     global FILENAME, DELETE_FILE  # Update global reference if needed
-    
-#     # Update variable references
-#     if DELETE_FILE and os.path.isfile(FILENAME):
-#         os.remove(FILENAME)
-    
-#     file_exists = os.path.isfile(FILENAME)
-    
-#     with open(FILENAME, mode='a', newline='') as file:
-#         writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-        
-#         # Write the header only if the file does not exist
-#         if not file_exists:
-#             writer.writeheader()
-        
-#         # Extract payload details
-#         model = payload.get('model', '')
-#         prompt = payload.get('prompt', '')
-#         temperature = payload.get('options', {}).get('temperature', '')
-#         num_ctx_tokens = payload.get('options', {}).get('num_ctx', '')
-#         num_output_tokens = payload.get('options', {}).get('num_predict', '')
-        
-#         # Get the current timestamp
-#         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-#         # Write the row
-#         writer.writerow({
-#             'timestamp': timestamp,
-#             'model': model,
-#             'prompt': prompt,
-#             'prompt_type': prompt_type,
-#             'temperature': temperature,
-#             'num_ctx_tokens': num_ctx_tokens,
-#             'num_output_tokens': num_output_tokens,
-#             'time_taken': time_taken,
-#             'response': response            
-#         })
-
-
 from prompts import self_reflective_prompt
 
 def generate_self_reflective_prompt(initial_prompt, model, max_iterations, temperature, num_ctx_tokens, num_output_tokens, similarity_threshold=0.95):
     """
     Generate a self-reflective prompt by iteratively calling the model and refining the prompt.
     """
-
     prompt = initial_prompt 
-    best_prompt = initial_prompt  # Initialize the best prompt
-    best_similarity = 0  # Initialize the best similarity score
+    best_prompt = initial_prompt
+    best_similarity = 0
 
     for i in range(max_iterations):
-        # Process the request and log the response
         print(f"Iteration {i+1}: Refining prompt...")
-
-        # Send to the model for refinement
-        response, time = process_and_log_request(
-            prompt=prompt,
+        
+        # Create a self-reflective version of the current prompt
+        reflective_prompt = self_reflective_prompt(prompt)  # This creates the meta-prompt
+        
+        # Process the self-reflective prompt using process_request
+        payload, response, time = process_request(
+            prompt=reflective_prompt,  # Use the reflective version
             model=model,
-            prompt_type="self_reflective",
-            temperature=temperature, 
-            num_ctx_tokens=num_ctx_tokens, 
-            num_output_tokens=num_output_tokens              
+            temperature=temperature,
+            num_ctx_tokens=num_ctx_tokens,
+            num_output_tokens=num_output_tokens
         )
-
-        # Extract the refined prompt from the model's response
+        
         refined_prompt = refine_prompt(prompt, response)
-
-        # Compute semantic similarity
         similarity = compute_similarity(prompt, refined_prompt)
-        print(f"Semantic Similarity: {similarity}")
-
-        # Evaluate the refined prompt
-        clarity, specificity, effectiveness = evaluate_prompt(refined_prompt)
-        print(f"Clarity: {clarity}, Specificity: {specificity}, Effectiveness: {effectiveness}")
-
-        # Check for convergence: If the similarity is above the threshold, stop
+        
+        # Calculate metrics for logging
+        clarity, specificity, effectiveness = evaluate_prompt(prompt)
+        
+        # Log results with metrics
+        log_results(
+            payload=payload,
+            response=response,
+            time_taken=time,
+            prompt_type=f"self_reflective_iteration_{i+1}",
+            similarity=similarity,
+            clarity=clarity,
+            specificity=specificity,
+            effectiveness=effectiveness
+        )
+        
         if similarity >= similarity_threshold:
-            print(f"Convergence reached at iteration {i+1} with similarity {similarity}. Stopping refinement.")
-            best_prompt = refined_prompt  # Update the best prompt
+            print(f"Convergence reached at iteration {i+1}")
+            best_prompt = refined_prompt
             break
-
-        # Update the best prompt if the current similarity is higher
+            
         if similarity > best_similarity:
             best_similarity = similarity
             best_prompt = refined_prompt
-
-        # Update prompt for next iteration
-        prompt = self_reflective_prompt(refined_prompt) 
-
+            
+        prompt = refined_prompt  # Use refined prompt for next iteration
+    
     return best_prompt
 
 
@@ -318,17 +283,24 @@ def process_request(prompt, model, temperature, num_ctx_tokens, num_output_token
     
     return payload, response, time
 
-def log_results(payload: Dict[str, Any], response: str, time_taken: float, prompt_type: str) -> None:
+def log_results(payload: Dict[str, Any], response: str, time_taken: float, prompt_type: str, 
+               similarity: float = 0.0, clarity: int = 0, specificity: int = 0, 
+               effectiveness: int = 0) -> None:
     """
-    Log the payload, response, time taken, and prompt type to a CSV file.
+    Log the payload, response, time taken, prompt type and evaluation metrics to a CSV file.
     """
-    global FILENAME, DELETE_FILE
+    global FILENAME, DELETE_FILE, _FIRST_WRITE
     
-    if DELETE_FILE and os.path.isfile(FILENAME):
+    print(f"\nLog operation - DELETE_FILE: {DELETE_FILE}, _FIRST_WRITE: {_FIRST_WRITE}")
+    
+    if DELETE_FILE and _FIRST_WRITE and os.path.isfile(FILENAME):
+        print(f"\nDeleting existing output file: {FILENAME}")
         os.remove(FILENAME)
+    _FIRST_WRITE = False  # Move this outside the if block
     
     file_exists = os.path.isfile(FILENAME)
     
+    print(f"\nWrite to log")
     with open(FILENAME, mode='a', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=FIELDNAMES)  # Use constant
         
@@ -353,13 +325,15 @@ def log_results(payload: Dict[str, Any], response: str, time_taken: float, promp
             'num_ctx_tokens': num_ctx_tokens,
             'num_output_tokens': num_output_tokens,
             'time_taken': time_taken,
-            'response': response            
+            'similarity': similarity,
+            'clarity': clarity,
+            'specificity': specificity,
+            'effectiveness': effectiveness,
+            'response': response
         })
 
 def process_and_log_request(prompt, model, prompt_type, temperature, num_ctx_tokens, num_output_tokens):
-    """
-    Process the request and log the response to a CSV file.
-    """
+    """Process the request and log the response with metrics to a CSV file."""
     # Process the request
     payload, response, time = process_request(
         prompt=prompt,
@@ -369,13 +343,40 @@ def process_and_log_request(prompt, model, prompt_type, temperature, num_ctx_tok
         num_output_tokens=num_output_tokens
     )
     
-    # Log the results
-    log_results(payload, response, time, prompt_type)
+    # Calculate metrics
+    clarity, specificity, effectiveness = evaluate_prompt(prompt)
+    similarity = compute_similarity(prompt, response) if response else 0.0
+    
+    # Log the results with metrics
+    log_results(
+        payload=payload,
+        response=response,
+        time_taken=time,
+        prompt_type=prompt_type,
+        similarity=similarity,
+        clarity=clarity,
+        specificity=specificity,
+        effectiveness=effectiveness
+    )
     
     return response, time
 
 def get_embedding(text):
-    inputs = bert_tokenizer(text, return_tensors='pt')
+    """
+    Get BERT embeddings for text, truncating if necessary.
+    
+    Args:
+        text: Input text to embed
+        
+    Returns:
+        numpy.ndarray: Text embedding
+    """
+    inputs = bert_tokenizer(
+        text, 
+        return_tensors='pt',
+        truncation=True,
+        max_length=512  # BERT's maximum sequence length
+    )
     outputs = bert_model(**inputs)
     return outputs.last_hidden_state.mean(dim=1).detach().numpy()
 
@@ -384,13 +385,25 @@ def compute_similarity(prompt1, prompt2):
     embedding2 = get_embedding(prompt2)
     return cosine_similarity(embedding1, embedding2)[0][0]
 
-def evaluate_prompt(prompt):
-    # Example quality metrics
-    clarity_score = len(prompt.split())  # Example: word count as a proxy for clarity
-    specificity_score = prompt.count('specific')  # Example: count of the word 'specific'
-    effectiveness_score = prompt.count('effective')  # Example: count of the word 'effective'
+def evaluate_prompt(prompt: str) -> Tuple[int, int, int]:
+    """
+    Evaluate the quality metrics of a prompt.
     
-    return clarity_score, specificity_score, effectiveness_score
+    Args:
+        prompt: The prompt text to evaluate
+        
+    Returns:
+        Tuple[int, int, int]: (clarity_score, specificity_score, effectiveness_score)
+    """
+    try:
+        clarity_score = len(prompt.split())
+        specificity_score = prompt.count('specific')
+        effectiveness_score = prompt.count('effective')
+        
+        return clarity_score, specificity_score, effectiveness_score
+    except Exception as e:
+        print(f"Error evaluating prompt: {e}")
+        return 0, 0, 0
 
 #------------------------------------------------------------------------------
 # DEBUG SECTION
@@ -429,13 +442,22 @@ if __name__ == "__main__":
       
     # Send the prompt to the model
     print(f"\nFinal Prompt Executing")
-    process_and_log_request(
+    
+    #Process the request
+    payload, response, time = process_request(
         prompt=prompt,
         model=model,
-        prompt_type=args.prompt_type,
         temperature=temperature,
         num_ctx_tokens=num_ctx_tokens,
         num_output_tokens=num_output_tokens
+    )
+    
+    # Log results (with default metrics)
+    log_results(
+        payload=payload,
+        response=response,
+        time_taken=time,
+        prompt_type=args.prompt_type
     )
 
 

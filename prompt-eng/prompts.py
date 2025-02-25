@@ -123,8 +123,8 @@ def self_reflective():
     num_ctx_tokens = 5000
     num_output_tokens = 10000
     
-    refined_prompt = self_reflective_prompt(ZERO_SHOT_PROMPT)
-    return refined_prompt, model, temperature, num_ctx_tokens, num_output_tokens
+    prompt = ZERO_SHOT_PROMPT # just return zero shot
+    return prompt, model, temperature, num_ctx_tokens, num_output_tokens
 
 def self_reflective_prompt(prompt):
     """
