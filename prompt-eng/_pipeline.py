@@ -38,13 +38,14 @@ import requests
 import torch
 from transformers import BertTokenizer, BertModel
 from sklearn.metrics.pairwise import cosine_similarity
+from textstat import flesch_reading_ease
 
 # Local imports
 from prompts import self_reflective_prompt, get_prompt
 
 # Constants
 FILENAME = "output.csv"  # Output file for logging responses
-DELETE_FILE = True      # If True, deletes existing file before writing
+DELETE_FILE = False      # If True, deletes existing file before writing
 FIELDNAMES = [          # CSV column headers
     'timestamp',        # Time of request
     'model',           # Model name used
@@ -193,23 +194,24 @@ def model_req(payload=None):
 
 from prompts import self_reflective_prompt
 
-def generate_self_reflective_prompt(initial_prompt, model, max_iterations, temperature, num_ctx_tokens, num_output_tokens, similarity_threshold=0.95):
+def generate_self_reflective_prompt(initial_prompt, model, max_iterations, temperature, num_ctx_tokens, num_output_tokens, similarity_threshold=0.95, min_iterations=5):
     """
     Generate a self-reflective prompt by iteratively calling the model and refining the prompt.
+    Enforces minimum iterations before considering convergence.
     """
     prompt = initial_prompt 
     best_prompt = initial_prompt
     best_similarity = 0
+    best_iteration = 1  # Initialize tracking to avoid undefined variable error
 
     for i in range(max_iterations):
         print(f"Iteration {i+1}: Refining prompt...")
         
         # Create a self-reflective version of the current prompt
-        reflective_prompt = self_reflective_prompt(prompt)  # This creates the meta-prompt
+        reflective_prompt = self_reflective_prompt(prompt)
         
-        # Process the self-reflective prompt using process_request
         payload, response, time = process_request(
-            prompt=reflective_prompt,  # Use the reflective version
+            prompt=reflective_prompt,
             model=model,
             temperature=temperature,
             num_ctx_tokens=num_ctx_tokens,
@@ -219,10 +221,8 @@ def generate_self_reflective_prompt(initial_prompt, model, max_iterations, tempe
         refined_prompt = refine_prompt(prompt, response)
         similarity = compute_similarity(prompt, refined_prompt)
         
-        # Calculate metrics for logging
         clarity, specificity, effectiveness = evaluate_prompt(prompt)
         
-        # Log results with metrics
         log_results(
             payload=payload,
             response=response,
@@ -234,14 +234,16 @@ def generate_self_reflective_prompt(initial_prompt, model, max_iterations, tempe
             effectiveness=effectiveness
         )
         
-        if similarity >= similarity_threshold:
-            print(f"Convergence reached at iteration {i+1}")
-            best_prompt = refined_prompt
-            break
-            
         if similarity > best_similarity:
             best_similarity = similarity
             best_prompt = refined_prompt
+            best_iteration = i + 1  # Track which iteration had the best prompt
+
+            
+        if i >= min_iterations - 1 and similarity >= similarity_threshold:
+            print(f"Convergence reached at iteration {i+1}. Best similarity found at Iteration {best_iteration} with similarity {best_similarity}.")
+            return best_prompt  # Use the highest similarity prompt, not the last iteration
+
             
         prompt = refined_prompt  # Use refined prompt for next iteration
     
@@ -332,34 +334,34 @@ def log_results(payload: Dict[str, Any], response: str, time_taken: float, promp
             'response': response
         })
 
-def process_and_log_request(prompt, model, prompt_type, temperature, num_ctx_tokens, num_output_tokens):
-    """Process the request and log the response with metrics to a CSV file."""
-    # Process the request
-    payload, response, time = process_request(
-        prompt=prompt,
-        model=model,
-        temperature=temperature,
-        num_ctx_tokens=num_ctx_tokens,
-        num_output_tokens=num_output_tokens
-    )
+# def process_and_log_request(prompt, model, prompt_type, temperature, num_ctx_tokens, num_output_tokens):
+#     """Process the request and log the response with metrics to a CSV file."""
+#     # Process the request
+#     payload, response, time = process_request(
+#         prompt=prompt,
+#         model=model,
+#         temperature=temperature,
+#         num_ctx_tokens=num_ctx_tokens,
+#         num_output_tokens=num_output_tokens
+#     )
     
-    # Calculate metrics
-    clarity, specificity, effectiveness = evaluate_prompt(prompt)
-    similarity = compute_similarity(prompt, response) if response else 0.0
+#     # Calculate metrics
+#     clarity, specificity, effectiveness = evaluate_prompt(prompt)
+#     similarity = compute_similarity(prompt, response) if response else 0.0
     
-    # Log the results with metrics
-    log_results(
-        payload=payload,
-        response=response,
-        time_taken=time,
-        prompt_type=prompt_type,
-        similarity=similarity,
-        clarity=clarity,
-        specificity=specificity,
-        effectiveness=effectiveness
-    )
+#     # Log the results with metrics
+#     log_results(
+#         payload=payload,
+#         response=response,
+#         time_taken=time,
+#         prompt_type=prompt_type,
+#         similarity=similarity,
+#         clarity=clarity,
+#         specificity=specificity,
+#         effectiveness=effectiveness
+#     )
     
-    return response, time
+#     return response, time
 
 def get_embedding(text):
     """
@@ -385,6 +387,27 @@ def compute_similarity(prompt1, prompt2):
     embedding2 = get_embedding(prompt2)
     return cosine_similarity(embedding1, embedding2)[0][0]
 
+def compute_specificity(text):
+    SPECIFICITY_KEYWORDS = [
+        "must", "shall", "should", "is required to",
+        "at least", "no more than", "exactly", "maximum", "minimum", "threshold",
+        "only if", "unless", "under the condition that", "provided that",
+        "within", "between", "greater than", "less than", "not more than"
+    ]
+    return sum(text.lower().count(word) for word in SPECIFICITY_KEYWORDS)
+
+
+def compute_effectiveness(text):
+    """
+    Compute effectiveness score by counting occurrences of action-oriented words.
+    """
+    EFFECTIVENESS_KEYWORDS = [
+    "ensure", "optimize", "prevent", "enhance", "increase", "reduce",
+    "maximize", "minimize", "streamline", "automate", "improve", "enable"
+]
+    return sum(text.lower().count(word) for word in EFFECTIVENESS_KEYWORDS)
+
+
 def evaluate_prompt(prompt: str) -> Tuple[int, int, int]:
     """
     Evaluate the quality metrics of a prompt.
@@ -396,9 +419,9 @@ def evaluate_prompt(prompt: str) -> Tuple[int, int, int]:
         Tuple[int, int, int]: (clarity_score, specificity_score, effectiveness_score)
     """
     try:
-        clarity_score = len(prompt.split())
-        specificity_score = prompt.count('specific')
-        effectiveness_score = prompt.count('effective')
+        clarity_score = flesch_reading_ease(prompt)
+        specificity_score = compute_specificity(prompt)    
+        effectiveness_score = compute_effectiveness(prompt)         
         
         return clarity_score, specificity_score, effectiveness_score
     except Exception as e:
@@ -429,14 +452,15 @@ if __name__ == "__main__":
 
     #generate the self reflective prompt
     if args.prompt_type == "self_reflective":
-        # Generate self-reflective prompt
-            prompt = generate_self_reflective_prompt(
+        # Generate self-reflective prompt with minimum iterations
+        prompt = generate_self_reflective_prompt(
             initial_prompt=prompt,
             model=model,
-            max_iterations=5,  
+            max_iterations=10,  # Increased max_iterations to allow for convergence after min
             temperature=temperature,
             num_ctx_tokens=num_ctx_tokens,
-            num_output_tokens=num_output_tokens
+            num_output_tokens=num_output_tokens,
+            min_iterations=5  # Force minimum of 5 iterations
         )
         
       
@@ -452,12 +476,20 @@ if __name__ == "__main__":
         num_output_tokens=num_output_tokens
     )
     
-    # Log results (with default metrics)
+    # Calculate metrics for all prompt types
+    clarity, specificity, effectiveness = evaluate_prompt(prompt)
+    similarity = compute_similarity(prompt, response) if response else 0.0
+    
+    # Log results with metrics for all prompt types
     log_results(
         payload=payload,
         response=response,
         time_taken=time,
-        prompt_type=args.prompt_type
+        prompt_type=args.prompt_type,
+        similarity=similarity,
+        clarity=clarity,
+        specificity=specificity,
+        effectiveness=effectiveness
     )
 
 
