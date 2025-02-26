@@ -1,6 +1,6 @@
 ![GenI-banner](https://github.com/genilab-fau/genilab-fau.github.io/blob/8d6ab41403b853a273983e4c06a7e52229f43df5/images/genilab-banner.png?raw=true)
 
-# **Comparative Evaluation of Prompt Engineering Techniques for Security Requirement Generation**
+# **Comparative Evaluation of Prompt Engineering Techniques for Requirement Generation**
 
 Exploring the systematic combination of prompt engineering techniques with convergence validation in self-reflective prompting.
 
@@ -52,10 +52,10 @@ How can we systematically evaluate prompt engineering techniques while leveragin
 ---
 
 ## **Use Case & Justification**
-This study focuses on **automating requirement analysis for a local, privacy-preserving LLM-based redaction tool**. The tool is designed to **accurately and efficiently redact names, emails, and other sensitive information from meeting transcripts** while ensuring compliance with privacy and security standards.
+This study focuses on automating requirement analysis for a local, privacy-preserving LLM-based redaction tool. The tool is designed to accurately and efficiently redact names, emails, and other sensitive information from meeting transcripts while ensuring compliance with privacy and security standards.
 
 ### **Why This Problem?**
-- **Privacy regulations require accurate redaction of sensitive data** in meeting transcripts and documents.
+- **Privacy regulations require accurate redaction of sensitive data** in meeting transcripts and other sensitive documents.
 - **Manual redaction is error-prone and inefficient**, making automation critical.
 - **LLMs offer high accuracy but must be privacy-preserving**, ensuring no sensitive data leaks.
 - **Self-reflective prompting can iteratively refine requirement quality** to ensure security, scalability, and efficiency constraints are met.
@@ -75,44 +75,56 @@ Our methodology consists of three phases:
 ## **Metric Definitions**
 
 ### **Clarity**
-Clarity is measured using the **Flesch Reading Ease score**, which evaluates sentence complexity and word difficulty. A **higher score** indicates the text is **easier to read**, while a **lower score** suggests greater complexity.
+Clarity is measured using the **Flesch Reading Ease score**, which evaluates sentence complexity and word difficulty. A higher score indicates the text is easier to read, while a lower score suggests greater complexity.
 
 ### **Specificity**
-Specificity is evaluated by counting the occurrences of **strong requirement-defining words**, such as "must," "shall," "exactly," "minimum," and "threshold." Higher specificity scores indicate **greater precision and explicit constraints** in the generated requirements.
+Specificity is evaluated by counting the occurrences of strong requirement-defining words, such as "must," "shall," "exactly," "minimum," and "threshold." Higher specificity scores indicate greater precision and explicit constraints in the generated requirements.
 
 ### **Effectiveness**
-Effectiveness is assessed by detecting **action-oriented and goal-driven words**, such as "ensure," "optimize," "enhance," "reduce," and "automate." This metric captures how well the requirement describes **an outcome or functional objective** rather than being vague or generic.
+Effectiveness is assessed by detecting action-oriented and goal-driven words, such as "ensure," "optimize," "enhance," "reduce," and "automate." This metric captures how well the requirement describes an outcome or functional objective rather than being vague or generic.
 
 ---
 
 ## **Results & Findings**
 
-### **1️⃣ Comparison of Prompting Techniques**
-The following table presents the **average clarity, specificity, and effectiveness scores** for each prompting technique.
+### **Comparison of Prompting Techniques**
+The following table presents the average clarity, specificity, effectiveness scores and run time for each prompting technique. 
 
-| Prompting Technique            | Clarity | Specificity | Effectiveness |
-|--------------------------------|---------|------------|--------------|
-| zero_shot                       | 9.89    | 0.00       | 1.00         |
-| few_shot                       | 33.51   | 18.00      | 3.00         |
-| self_reflective_iteration_1     | 9.89    | 0.00       | 1.00         |
-| self_reflective_iteration_2     | 18.15   | 1.00       | 0.00         |
-| self_reflective_iteration_3     | 5.53    | 0.00       | 0.00         |
-| self_reflective_iteration_4     | 17.54   | 4.00       | 3.00         |
-| self_reflective - Best Prompt   | 19.67   | 4.00       | 3.00         |
+| Prompting Technique            | Clarity | Specificity | Effectiveness | Run Time (seconds) |
+|--------------------------------|---------|------------|--------------|--------------|
+| zero_shot                       | 9.89    | 0.00       | 1.00         | 33.902 |
+| few_shot                       | 33.51   | 18.00      | 3.00         | 48.103 |
+| self_reflective_iteration_1     | 9.89    | 0.00       | 1.00         |23.774|
+| self_reflective_iteration_2     | 18.15   | 1.00       | 0.00         |23.676|
+| self_reflective_iteration_3     | 5.53    | 0.00       | 0.00         |31.329|
+| self_reflective_iteration_4     | 17.54   | 4.00       | 3.00         |31.622|
+| self_reflective_iteration_5     | 19.67   | 4.00       | 3.00         |36.153|
+| self_reflective - Best Prompt   | 19.67   | 4.00       | 3.00         |119.158|
 
 
-### **2️⃣ Visualization of Metric Trends**
-The following visualization illustrates how clarity, specificity, and effectiveness scores change across different prompting techniques.
+### **Visualization of Metric Trends**
 
 ![Comparison of Prompting Techniques](images/prompting_comparison.png)
 
-#### **Key Observations:**
-- **Few-shot prompting consistently achieves the highest clarity, specificity, and effectiveness scores**, demonstrating the importance of structured examples.
-- **Self-reflective iterations improve similarity but sometimes reduce specificity and effectiveness**, suggesting that additional refinement methods may be necessary.
-- **Zero-shot prompting tends to perform poorly across all metrics**, reinforcing the need for better contextual guidance in prompt engineering.
-- **Self-reflective iterations do not always result in linear improvement**, as clarity fluctuates and specificity/effectiveness decrease over iterations.
+**Figure 1: Comparative Analysis of Prompt Engineering Techniques**. This visualization presents how the three prompting methods performed across our key quality metrics.
 
-### **4️⃣ Visualizations of Metric Trends**
+#### Analysis and Findings:
+
+The data reveals several important patterns:
+
+1. **Few-shot prompting demonstrates superior performance** in clarity (33.51) and specificity (18), while matching self-reflective prompting in effectiveness (3). This suggests that providing examples is the most effective approach for generating high-quality requirements.
+
+2. **Self-reflective prompting shows moderate improvement** over zero-shot, with final clarity (19.67) and specificity (4) scores that are better than zero-shot but don't match few-shot performance. The effectiveness score (3) equals few-shot, indicating that iteration can achieve good action-orientation.
+
+3. **Zero-shot prompting consistently underperforms** with the lowest scores in clarity (9.89), specificity (0), and effectiveness (1), confirming that providing no context or examples produces vague, general requirements.
+
+4. **Self-reflective iteration is non-linear**, with fluctuating clarity (ranging from 5.53 to 19.67) and inconsistent specificity/effectiveness scores across iterations. This suggests that self-reflection doesn't guarantee steady improvement and may require careful guidance.
+
+5. **Effectiveness appears to have a ceiling effect** at score 3, achieved by both few-shot and self-reflective methods, indicating that basic action-orientation can be achieved through different approaches.
+
+These findings suggest that for optimal requirement generation, few-shot prompting provides the most reliable results, while self-reflective prompting may be beneficial as a secondary refinement technique rather than a primary approach.
+
+### **Visualizations of Metric Trends**
 
 ![Clarity, Specificity, and Effectiveness Across Methods](images/clarity_specif_simil_effect_graph.png)
 
@@ -157,20 +169,20 @@ Organizations should consider these tradeoffs when selecting a prompting strateg
 
 ## **Future Research**
 
-### **1️⃣ Hybrid Prompting Strategies for Balancing Specificity & Effectiveness**
-- The study found that **few-shot prompting performs best** in clarity, specificity, and effectiveness.
-- **Self-reflective iterations improve stability but weaken specificity and effectiveness**.
-- Future research should explore **how structured examples can be combined with self-reflective techniques** to maintain both **consistency and precision** in requirements generation.
+### **1️ Hybrid Prompting Strategies for Balancing Specificity & Effectiveness**
+- The study found that few-shot prompting performs best in clarity, specificity, and effectiveness.
+- Self-reflective iterations improve stability but weaken specificity and effectiveness.
+- Future research should explore how structured examples can be combined with self-reflective techniques to maintain both consistency and precision in requirements generation.
 
-### **2️⃣ Machine Learning-Based Metrics for Specificity & Effectiveness**
-- Current evaluation relies on **keyword-based scoring**.
-- Future research could implement **ML classifiers** or **LLM-based assessment models** to evaluate **requirement quality beyond keyword occurrences**.
-- This would allow for **context-aware** scoring that adapts to different domains and requirement structures.
+### **2️ Machine Learning-Based Metrics for Specificity & Effectiveness**
+- Current evaluation relies on keyword-based scoring.
+- Future research could implement ML classifiers or LLM-based assessment models to evaluate requirement quality beyond keyword occurrences.
+- This would allow for context-aware scoring that adapts to different domains and requirement structures.
 
-### **3️⃣ User-Centric Validation of Prompt Engineering Results**
-- The current study relies on **algorithmic evaluation metrics**.
-- Future research could introduce **human expert assessments** to validate whether refined requirements align with **stakeholder expectations**.
-- Crowdsourced evaluations or **comparative studies** could assess how **end-users perceive clarity, specificity, and effectiveness in generated requirements**.
+### **3️ User-Centric Validation of Prompt Engineering Results**
+- The current study relies on algorithmic evaluation metrics.
+- Future research could introduce human expert assessments to validate whether refined requirements align with stakeholder expectations.
+- Crowdsourced evaluations or comparative studies could assess how end-users perceive clarity, specificity, and effectiveness in generated requirements.
 
 ---
 
@@ -198,4 +210,8 @@ Our findings on prompt engineering effectiveness have implications for:
 1. **Requirements Engineering**: Traditional requirement elicitation might be enhanced by LLM-assisted processes
 2. **Security Compliance**: Automated generation of compliance-ready security requirements could accelerate certification processes
 3. **Software Testing**: Similar prompting techniques might be applicable for generating comprehensive test cases for security features
+
+### Acknowledgments
+
+This research was conducted with assistance from generative AI tools, specifically Claude Sonnet 3.7, which was used for editing, formatting, and refining the manuscript. All experimental design, data collection, analysis, and conclusions were human-directed. The use of AI tools aligns with the research focus on prompt engineering techniques and provides a practical demonstration of the capabilities discussed in this paper.
 
